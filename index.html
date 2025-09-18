@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stude Planner — Interactive Timetable</title>
+  <style>
+    :root{
+      --bg:#0f172a; --card:#0b1220; --accent:#60a5fa; --muted:#94a3b8; --glass: rgba(255,255,255,0.04);
+      --success:#10b981; --danger:#ef4444;
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071024 0%, #07112a 100%);color:#e6eef8}
+    .container{max-width:1100px;margin:28px auto;padding:22px}
+
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:4px 0 0;color:var(--muted);font-size:13px}
+
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:18px;margin-top:18px}
+    .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
+    input[type=text], input[type=number], select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    .row{display:flex;gap:8px}
+    .small{font-size:12px;color:var(--muted)}
+
+    .subjects-list{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+    .subject-item{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:linear-gradient(90deg, rgba(255,255,255,0.02), transparent)}
+    .subject-item strong{flex:1}
+    button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#04233a;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    button.danger{background:var(--danger);color:white}
+
+    .days{display:flex;gap:6px;flex-wrap:wrap}
+    .day{padding:8px 10px;border-radius:8px;background:rgba(255,255,255,0.02);cursor:pointer;border:1px solid transparent}
+    .day.active{background:linear-gradient(90deg, rgba(96,165,250,0.12), rgba(96,165,250,0.06));border-color:rgba(96,165,250,0.25)}
+
+    .timetable{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+    .slot{min-height:80px;padding:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border:1px solid rgba(255,255,255,0.03);overflow:auto}
+    .day-head{font-size:13px;margin-bottom:8px;color:var(--muted)}
+    .session{margin:6px 0;padding:6px;border-radius:8px;background:linear-gradient(90deg, rgba(96,165,250,0.12), rgba(96,165,250,0.05));border-left:4px solid var(--accent);cursor:move}
+    .session .meta{font-size:12px;color:var(--muted)}
+
+    .controls{display:flex;gap:8px;margin-top:12px}
+    .footer-note{margin-top:10px;color:var(--muted);font-size:12px}
+
+    .export{display:flex;gap:8px;align-items:center}
+
+    
+    @media (max-width:900px){.grid{grid-template-columns:1fr;}.timetable{grid-template-columns:repeat(2,1fr)} }
+    @media (max-width:520px){.timetable{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Study Planner</h1>
+        <p class="lead">Create a personalized weekly study plan — for Any Exam</p>
+      </div>
+      <div class="export">
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn" class="ghost">Load</button>
+        <button id="exportBtn" class="ghost">Export JSON</button>
+        <button id="printBtn" class="ghost">Print</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <aside class="card" aria-label="controls">
+        <label>Profile</label>
+        <select id="profile">
+          <option value="ssc">SSC Aspirant</option>
+          <option value="btech">B.Tech Student</option>
+          <option value="btech">UPSC Civil Service</option>
+          <option value="custom">NDA</option>
+          <option value="custom">CDS</option>
+        </select>
+        <div style="height:10px"></div>
+
+        <label>Subject name</label>
+        <div class="row">
+          <input id="subName" type="text" placeholder="e.g. Math, Physics" />
+          <input id="subHours" type="number" min="0" placeholder="hrs/wk" style="width:90px" />
+        </div>
+        <div style="height:8px"></div>
+        <label class="small">Preferred session length (mins)</label>
+        <div class="row">
+          <input id="minSession" type="number" min="15" value="60" style="width:120px" />
+          <button id="addSub">Add Subject</button>
+        </div>
+
+        <div class="subjects-list" id="subjectsList" aria-live="polite"></div>
+
+        <div style="height:12px"></div>
+        <label>Days available</label>
+        <div class="days" id="days">
+          <div class="day" data-day="0">Mon</div>
+          <div class="day" data-day="1">Tue</div>
+          <div class="day" data-day="2">Wed</div>
+          <div class="day" data-day="3">Thu</div>
+          <div class="day" data-day="4">Fri</div>
+          <div class="day" data-day="5">Sat</div>
+          <div class="day" data-day="6">Sun</div>
+        </div>
+
+        <div style="height:12px"></div>
+        <label>Study window per day</label>
+        <div class="row">
+          <input id="startTime" type="time" value="18:00" />
+          <input id="endTime" type="time" value="22:00" />
+        </div>
+
+        <div style="height:10px"></div>
+        <label>Auto-generate schedule</label>
+        <div class="controls">
+          <button id="generate">Generate</button>
+          <button id="clear">Clear</button>
+        </div>
+        <p class="footer-note">Tip: add subjects with weekly hours. Then select days and generate a balanced schedule. Drag sessions between days to adjust.</p>
+      </aside>
+
+      <main>
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <strong>Weekly Timetable</strong>
+            <div class="small" id="summary">No sessions yet</div>
+          </div>
+
+          <div style="height:12px"></div>
+          <div class="timetable" id="timetable"></div>
+        </div>
+
+        <div style="height:12px"></div>
+        <div class="card">
+          <strong>Controls</strong>
+          <div style="height:8px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="autoBalance" class="ghost">Auto-balance durations</button>
+            <button id="resetAll" class="danger">Reset All</button>
+          </div>
+          <p class="footer-note">Sessions are draggable — drop into another day column. Click a session to mark complete.</p>
+        </div>
+      </main>
+    </div>
+  </div>
+
+<script>
+
+const presetProfiles = {
+  ssc: [
+    {name:'Math', hrs:8}, {name:'English', hrs:5}, {name:'Science', hrs:6}, {name:'Social', hrs:4}
+  ],
+  btech: [
+    {name:'DSA', hrs:7}, {name:'Operating Systems', hrs:4}, {name:'Maths', hrs:5}, {name:'Project', hrs:6}
+  ]
+}
+
+const subjects = [];
+let sessions = []; 
+const daysEl=document.getElementById('days');
+const subjectsList=document.getElementById('subjectsList');
+const timetable=document.getElementById('timetable');
+const profile=document.getElementById('profile');
+const minSession=document.getElementById('minSession');
+
+
+function initDays(){
+  daysEl.querySelectorAll('.day').forEach(d=>{
+    d.addEventListener('click',()=>d.classList.toggle('active'))
+  })
+}
+initDays();
+
+profile.addEventListener('change',()=>{
+  const p = profile.value;
+  if(p==='ssc' || p==='btech'){
+    subjects.length=0; presetProfiles[p].forEach(s=>subjects.push({...s})); renderSubjects();
+  } else { subjects.length=0; renderSubjects(); }
+})
+
+function renderSubjects(){
+  subjectsList.innerHTML='';
+  subjects.forEach((s,i)=>{
+    const el=document.createElement('div'); el.className='subject-item';
+    el.innerHTML=`<strong>${s.name}</strong><div class="small">${s.hrs} hrs/wk</div>`;
+    const btnDel=document.createElement('button'); btnDel.className='ghost'; btnDel.textContent='Edit';
+    btnDel.onclick=()=>{ const nh=prompt('Hours per week',s.hrs); if(nh!==null){s.hrs=Number(nh); renderSubjects();} }
+    const btnRemove=document.createElement('button'); btnRemove.className='danger'; btnRemove.textContent='Remove';
+    btnRemove.onclick=()=>{subjects.splice(i,1); renderSubjects();}
+    el.appendChild(btnDel); el.appendChild(btnRemove);
+    subjectsList.appendChild(el);
+  })
+  updateSummary();
+}
+
+
+document.getElementById('addSub').addEventListener('click',()=>{
+  const name=document.getElementById('subName').value.trim();
+  const hrs=Number(document.getElementById('subHours').value||0);
+  const ms=Number(minSession.value)||60;
+  if(!name||hrs<=0){alert('Enter subject name and weekly hours ( > 0 )');return}
+  subjects.push({name,hrs,ms}); document.getElementById('subName').value='';document.getElementById('subHours').value=''; renderSubjects();
+})
+
+function getActiveDays(){
+  return Array.from(daysEl.querySelectorAll('.day.active')).map(d=>Number(d.dataset.day));
+}
+
+function generateSchedule(){
+  sessions=[];
+  const active = getActiveDays();
+  if(active.length===0){alert('Select at least one day'); return}
+  const start=document.getElementById('startTime').value; const end=document.getElementById('endTime').value;
+  if(!start||!end || start>=end){alert('Invalid study window'); return}
+  
+  const [sh,sm]=start.split(':').map(Number); const [eh,em]=end.split(':').map(Number);
+  const minsPerDay = (eh*60+em) - (sh*60+sm);
+  if(minsPerDay<=0){alert('Study window too small');return}
+
+  
+  const totalMins = subjects.reduce((s,x)=>s + x.hrs*60,0);
+  
+  let scale=1;
+  if(totalMins > minsPerDay*active.length){ scale = (minsPerDay*active.length) / totalMins; alert('Total weekly hours exceed available time. We will scale sessions proportionally.'); }
+
+  let cid=0;
+  
+  subjects.forEach(sub=>{
+    const desiredMins = Math.round(sub.hrs*60*scale);
+    const pref = sub.ms || Number(minSession.value) || 60;
+    const count = Math.max(1, Math.ceil(desiredMins/pref));
+    const base = Math.floor(desiredMins/count);
+    let extra = desiredMins - base*count;
+    for(let i=0;i<count;i++){
+      const len = base + (extra>0?1:0); if(extra>0) extra--;
+      const day = active[(i) % active.length];
+      sessions.push({id: 's'+(cid++), subject: sub.name, mins: len, day, done:false});
+    }
+  })
+  renderTimetable();
+}
+
+function renderTimetable(){
+  timetable.innerHTML='';
+  const dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  for(let d=0; d<7; d++){
+    const col=document.createElement('div'); col.className='slot';
+    const head=document.createElement('div'); head.className='day-head'; head.textContent=dayNames[d]; col.appendChild(head);
+    const daySessions = sessions.filter(s=>s.day===d);
+    daySessions.forEach(s=>{
+      const sEl=document.createElement('div'); sEl.className='session'; sEl.draggable=true; sEl.id=s.id;
+      sEl.innerHTML=`<div><strong>${s.subject}</strong></div><div class="meta">${Math.round(s.mins)} mins ${s.done? '• Done' : ''}</div>`;
+      sEl.addEventListener('click',()=>{ s.done=!s.done; renderTimetable(); });
+      sEl.addEventListener('dragstart',dragStart);
+      col.appendChild(sEl);
+    })
+    col.addEventListener('dragover',e=>e.preventDefault());
+    col.addEventListener('drop',e=>{ e.preventDefault(); const id=e.dataTransfer.getData('text'); moveSession(id,d); });
+    timetable.appendChild(col);
+  }
+  updateSummary();
+}
+
+function dragStart(e){ e.dataTransfer.setData('text', e.target.id); }
+function moveSession(id, newDay){ const idx=sessions.findIndex(s=>s.id===id); if(idx>=0){ sessions[idx].day=newDay; renderTimetable(); } }
+
+function clearSchedule(){ if(confirm('Clear generated schedule?')){ sessions=[]; renderTimetable(); } }
+
+function resetAll(){ if(confirm('Reset subjects and timetable?')){ subjects.length=0; sessions=[]; renderSubjects(); renderTimetable(); } }
+
+function autoBalance(){ 
+  const byDay = {}; for(let d=0;d<7;d++) byDay[d]=0;
+  
+  const active = getActiveDays(); if(active.length===0) { alert('Select active days'); return }
+  
+  const sorted = sessions.slice().sort((a,b)=>b.mins-a.mins);
+  const newDayMap={}; active.forEach(d=>byDay[d]=0);
+  sorted.forEach(s=>{
+    let best=active[0]; for(const d of active){ if(byDay[d] < byDay[best]) best=d; }
+    newDayMap[s.id]=best; byDay[best]+=s.mins;
+  });
+  sessions.forEach(s=>{ if(newDayMap[s.id]!==undefined) s.day=newDayMap[s.id]; });
+  renderTimetable();
+}
+
+function updateSummary(){
+  const total = sessions.reduce((a,b)=>a + b.mins,0);
+  const subjCount = new Set(sessions.map(s=>s.subject)).size;
+  document.getElementById('summary').textContent = `${Math.round(total/60*10)/10} hrs — ${sessions.length} sessions — ${subjCount} subjects`;
+}
+
+
+function save(){ localStorage.setItem('study_scheduler_subjects', JSON.stringify(subjects)); localStorage.setItem('study_scheduler_sessions', JSON.stringify(sessions)); alert('Saved locally'); }
+function load(){ const s=localStorage.getItem('study_scheduler_subjects'); const ss=localStorage.getItem('study_scheduler_sessions'); if(s){ subjects.length=0; JSON.parse(s).forEach(x=>subjects.push(x)); renderSubjects(); } if(ss){ sessions=JSON.parse(ss); renderTimetable(); } }
+function exportJSON(){ const data={subjects,sessions,config:{start:document.getElementById('startTime').value,end:document.getElementById('endTime').value,days:getActiveDays()}}; const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='study-schedule.json'; a.click(); URL.revokeObjectURL(url); }
+
+
+document.getElementById('generate').addEventListener('click',generateSchedule);
+document.getElementById('clear').addEventListener('click',clearSchedule);
+document.getElementById('autoBalance').addEventListener('click',autoBalance);
+document.getElementById('resetAll').addEventListener('click',resetAll);
+document.getElementById('saveBtn').addEventListener('click',save);
+document.getElementById('loadBtn').addEventListener('click',load);
+document.getElementById('exportBtn').addEventListener('click',exportJSON);
+document.getElementById('printBtn').addEventListener('click',()=>window.print());
+
+
+renderSubjects(); renderTimetable();
+
+</script>
+</body>
+</html>
